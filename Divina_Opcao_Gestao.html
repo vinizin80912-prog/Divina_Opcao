@@ -1,0 +1,321 @@
+<!doctype html><html lang=pt-br><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Divina Opção • Caixa</title><style>
+body{margin:0;padding:14px;font-family:Arial;background:#111;color:#fff}h2,h3{margin:8px 0}
+.card{background:#171717;border:1px solid #2a2a2a;border-radius:14px;padding:12px;margin:10px 0}
+input,select,button,textarea{width:100%;box-sizing:border-box;padding:11px;margin:6px 0;border-radius:12px;border:1px solid #333;background:#0f0f0f;color:#fff}
+button{background:#fff;color:#111;font-weight:800;border:0}.b2{background:#1c1c1c;color:#fff;border:1px solid #444}.danger{background:#3a1616;border:1px solid #7a2b2b}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.badge{display:inline-block;padding:4px 10px;border-radius:999px;border:1px solid #333;background:#0f0f0f;color:#ddd;font-size:12px}
+.small{color:#aaa;font-size:12px;line-height:1.4;margin-top:6px}
+.month{display:flex;align-items:center;gap:10px}.month button{width:auto;padding:10px 14px}.month div{flex:1;text-align:center;font-weight:800}
+canvas{width:100%;height:240px;background:#0f0f0f;border:1px solid #2a2a2a;border-radius:14px}
+.neg{color:#ff6b6b;font-weight:800}.pos{color:#7cff7c;font-weight:800}
+.bar{height:10px;border:1px solid #333;border-radius:999px;overflow:hidden;margin-top:6px}.fill{height:100%;background:#fff;width:0%}
+.kv{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}.kv .i{flex:1;min-width:150px;background:#101010;border:1px solid #2a2a2a;border-radius:12px;padding:10px}
+.kv .t{font-size:12px;color:#aaa}.kv .v{font-weight:800;margin-top:4px}
+hr{border:0;border-top:1px solid #2a2a2a;margin:10px 0}
+/* PIN LOCK */
+#lock{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:9999;padding:14px}
+#lock .box{width:min(420px,100%);background:#171717;border:1px solid #2a2a2a;border-radius:16px;padding:14px}
+#lock h3{margin:4px 0 10px}
+#lock .row{display:flex;gap:10px}
+#lock input{font-size:18px;letter-spacing:4px;text-align:center}
+</style></head><body>
+
+<h2>Divina Opção • Caixa</h2>
+
+<div id=lock><div class=box>
+  <h3 id=lt>Desbloquear</h3>
+  <div class=small id=ls></div>
+  <input id=pin type=password inputmode=numeric placeholder="PIN" maxlength=8>
+  <div class=row>
+    <button id=lb onclick=unlock()>Entrar</button>
+    <button class=b2 onclick=resetPinAsk()>Trocar PIN</button>
+  </div>
+  <div class=small style="margin-top:8px;color:#888">PIN serve pra evitar acidentes e curiosos. Sem servidor, isso é proteção local.</div>
+</div></div>
+
+<div class="card month">
+  <button class=b2 onclick="mm(-1)">◀</button><div id=mt>----</div><button class=b2 onclick="mm(1)">▶</button>
+</div>
+
+<div class=card>
+  <div class=row>
+    <select id=t><option>Venda</option><option>Gasto</option></select>
+    <input id=d type=date>
+  </div>
+  <input id=v type=number step=.01 placeholder=Valor>
+  <input id=x placeholder="Descrição">
+  <div class=row><button onclick=save()>Salvar</button><button class=b2 onclick=clr()>Limpar</button></div>
+  <div class=row><button class=b2 onclick=hoje()>HOJE</button><button class=b2 onclick="alert(clos())">Fechamento</button></div>
+
+  <details><summary class=badge>Meta / Backup / PIN</summary>
+
+    <div class=row><input id=meta type=number step=.01 placeholder="Meta lucro (mês)"><button class=b2 onclick=setMeta()>Salvar</button></div>
+
+    <div class=row><button class=b2 onclick=exp()>Export JSON</button><button class=b2 onclick=imp()>Import JSON</button></div>
+    <textarea id=bk placeholder="Backup JSON aqui (copiar/colar)"></textarea>
+
+    <div class=row><button class=b2 onclick=resetPinAsk()>Trocar PIN</button><button class=b2 onclick=lockNow()>Travar agora</button></div>
+
+    <button class=danger onclick=wipe()>Apagar TUDO</button>
+    <div class=small style="color:#888">Obs: Export/Import/Apagar pedem PIN.</div>
+  </details>
+</div>
+
+<div class=card><div class=row>
+  <select id=ft onchange=render()><option value=TODOS>Mostrar: Todos</option><option>Venda</option><option>Gasto</option></select>
+  <input id=q placeholder=Buscar oninput=render()>
+</div></div>
+
+<h3>Hoje</h3><div class=card id=today></div>
+<h3>Resumo do mês</h3><div class=card id=sum></div>
+<h3>Meta e Projeção</h3><div class=card id=metaBox></div>
+<h3>Ranking (melhores dias)</h3><div class=card id=rank></div>
+<h3>Histórico (6 meses)</h3><div class=card id=hist></div>
+
+<h3>Gráfico do mês</h3>
+<div class=card>
+  <div class=small>Branco = vendas • Vermelho = gastos • Verde (fininho) = lucro/ prejuízo. Toque no gráfico pra ver o dia.</div>
+  <canvas id=c width=1000 height=300></canvas>
+  <div id=tip class="small" style="margin-top:8px;min-height:18px;"></div>
+</div>
+
+<h3>Lançamentos</h3><div id=list></div>
+
+<script>
+const K="do_caixa_lend",KM="do_meta",KP="do_pin",KLT="do_lock_ts";
+let R=L(K,[]),S=YM(new Date()),unlocked=false;
+
+function D(i){return document.getElementById(i)}
+function L(k,def){try{return JSON.parse(localStorage.getItem(k)||"null")??def}catch{return def}}
+function W(k,v){localStorage.setItem(k,JSON.stringify(v))}
+function P2(n){return String(n).padStart(2,"0")}
+function YM(d){return d.getFullYear()+"-"+P2(d.getMonth()+1)}
+function TD(){let d=new Date();return d.getFullYear()+"-"+P2(d.getMonth()+1)+"-"+P2(d.getDate())}
+function ML(s){let[y,m]=s.split("-");let n=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];return n[+m-1]+" "+y}
+function BRL(v){return Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}
+function BRD(s){let[y,m,d]=s.split("-");return d+"/"+m+"/"+y}
+function ID(){return "i"+Math.random().toString(16).slice(2)+Date.now().toString(16)}
+function LD(y,m1){return new Date(y,m1,0).getDate()}
+function PM(s,delta){let[y,m]=s.split("-").map(Number),d=new Date(y,m-1+delta,1);return YM(d)}
+
+/* ===== PIN LOCK (offline) ===== */
+function H(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0).toString(16)}
+function hasPin(){return !!localStorage.getItem(KP)}
+function setPin(pin){
+  if(!/^\d{4,8}$/.test(pin)) return alert("PIN precisa ter 4 a 8 dígitos.");
+  localStorage.setItem(KP,H(pin));alert("PIN salvo.");
+}
+function verifyPin(pin){return H(pin)===localStorage.getItem(KP)}
+function showLock(msg){
+  D("lock").style.display="flex";D("ls").textContent=msg||"";D("pin").value="";
+  setTimeout(()=>D("pin").focus(),50);unlocked=false;
+}
+function hideLock(){D("lock").style.display="none";unlocked=true;W(KLT,Date.now())}
+window.unlock=function(){
+  let p=D("pin").value.trim();
+  if(!verifyPin(p)) return alert("PIN incorreto.");
+  hideLock();
+}
+function firstPin(){
+  D("lt").textContent="Criar PIN";D("lb").textContent="Salvar PIN";
+  showLock("Crie um PIN (4 a 8 dígitos) pra proteger os dados.");
+  window.unlock=function(){
+    let p=D("pin").value.trim();
+    if(!/^\d{4,8}$/.test(p)) return alert("PIN inválido.");
+    setPin(p);
+    D("lt").textContent="Desbloquear";D("lb").textContent="Entrar";
+    window.unlock=function(){let p=D("pin").value.trim();if(!verifyPin(p))return alert("PIN incorreto.");hideLock()};
+    hideLock();
+  }
+}
+function lockIfNeeded(){
+  if(!hasPin()) return firstPin();
+  D("lt").textContent="Desbloquear";D("lb").textContent="Entrar";
+  window.unlock=function(){let p=D("pin").value.trim();if(!verifyPin(p))return alert("PIN incorreto.");hideLock()};
+  let last=L(KLT,0),now=Date.now();
+  if(!last || (now-last)>120000) showLock("Digite o PIN para abrir o caixa.");
+  else hideLock();
+}
+function lockNow(){W(KLT,0);showLock("Trancado. Digite o PIN para continuar.");}
+function askPin(why){
+  if(!hasPin()) return true; // se não tem PIN, deixa
+  let p=prompt(why||"PIN:");
+  if(p==null) return false;
+  if(!verifyPin(String(p).trim())){alert("PIN incorreto.");return false}
+  return true;
+}
+document.addEventListener("visibilitychange",()=>{
+  if(document.hidden) W(KLT,Date.now());
+  else lockIfNeeded();
+});
+
+/* ===== APP ===== */
+D("d").value=TD();D("mt").textContent=ML(S);loadMeta();
+
+function mm(d){S=PM(S,d);D("mt").textContent=ML(S);loadMeta();render()}
+function hoje(){D("d").value=TD()}
+function clr(){D("t").value="Venda";D("v").value="";D("x").value=""}
+
+function save(){
+  let tipo=D("t").value,data=D("d").value,val=+String(D("v").value||"").replace(",",".");
+  if(!data||!val||val<=0) return alert("Dados inválidos");
+  let m=data.slice(0,7);
+  R.push({id:ID(),tipo,data,val,desc:(D("x").value||"").trim(),m,at:Date.now()});
+  W(K,R);clr();S=m;D("mt").textContent=ML(S);loadMeta();render()
+}
+function del(id){if(!confirm("Apagar?"))return;R=R.filter(r=>r.id!=id);W(K,R);render()}
+
+function T(month){
+  let v=0,g=0,c=0,days=new Set();
+  for(let r of R) if(r.m===month){c++;days.add(r.data);r.tipo=="Venda"?v+=r.val:g+=r.val}
+  return{v,g,l:v-g,c,activeDays:days.size}
+}
+function Tday(){
+  let v=0,g=0,d=TD();
+  for(let r of R) if(r.data===d){r.tipo=="Venda"?v+=r.val:g+=r.val}
+  return{v,g,l:v-g}
+}
+function clos(){
+  let t=T(S);
+  return`Fechamento ${ML(S)}\nLanç.: ${t.c}\nVendas: ${BRL(t.v)}\nGastos: ${BRL(t.g)}\nLucro: ${BRL(t.l)}`
+}
+
+function exp(){
+  if(!askPin("PIN para exportar:")) return;
+  D("bk").value=JSON.stringify({at:new Date().toISOString(),R},null,2)
+}
+function imp(){
+  if(!askPin("PIN para importar:")) return;
+  let s=(D("bk").value||"").trim(); if(!s) return alert("Cole o JSON");
+  try{let j=JSON.parse(s); if(!j.R||!Array.isArray(j.R)) return alert("Inválido");
+    R=j.R;W(K,R);alert("Importado");render()
+  }catch{alert("JSON inválido")}
+}
+function wipe(){
+  if(!askPin("PIN para apagar TUDO:")) return;
+  if(!confirm("Apagar TUDO?")) return;
+  R=[];W(K,R);render()
+}
+
+function loadMeta(){let M=L(KM,{});D("meta").value=M[S]??""}
+function setMeta(){
+  if(!askPin("PIN para salvar/remover meta:")) return;
+  let M=L(KM,{}),v=+String(D("meta").value||"").replace(",",".");
+  if(!v||v<=0){delete M[S];W(KM,M);alert("Meta removida");loadMeta();render();return}
+  M[S]=v;W(KM,M);alert("Meta salva");render()
+}
+
+function proj(){
+  let [Y,M]=S.split("-").map(Number),days=LD(Y,M),today=new Date();
+  let cur=(YM(today)===S)? today.getDate() : days;
+  let tm=T(S);
+  let avgLucro=cur? tm.l/cur : 0;
+  let avgFat=cur? tm.v/cur : 0;
+  return{days,cur,avgLucro,avgFat,estLucro:avgLucro*days,estFat:avgFat*days}
+}
+function byDay(month){
+  let [Y,M]=month.split("-").map(Number),days=LD(Y,M);
+  let a=Array.from({length:days},(_,i)=>({day:i+1,date:`${Y}-${P2(M)}-${P2(i+1)}`,v:0,g:0,l:0,has:false}));
+  for(let r of R) if(r.m===month){
+    let i=+r.data.slice(8,10)-1; if(!a[i]) continue;
+    a[i].has=true;
+    if(r.tipo=="Venda") a[i].v+=r.val; else a[i].g+=r.val;
+    a[i].l=a[i].v-a[i].g;
+  }
+  return a
+}
+function rankHTML(){
+  let a=byDay(S).filter(x=>x.has);
+  if(!a.length) return `<div class=small>Nenhum dia com movimento nesse mês.</div>`;
+  let topL=[...a].sort((p,q)=>q.l-p.l).slice(0,5);
+  let topV=[...a].sort((p,q)=>q.v-p.v).slice(0,5);
+  function line(x,tag,cls){
+    return `<div class=small><b>${P2(x.day)}/${S.slice(5,7)}</b> • ${tag}: <span class="${cls}">${BRL(tag=="Lucro"?x.l:x.v)}</span> <span style="color:#777">(${BRL(x.v)} V • ${BRL(x.g)} G)</span></div>`;
+  }
+  return `
+  <div class=kv>
+    <div class=i><div class=t>Top 5 por Lucro</div><div>${topL.map(x=>line(x,"Lucro",x.l<0?"neg":"pos")).join("")}</div></div>
+    <div class=i><div class=t>Top 5 por Vendas</div><div>${topV.map(x=>line(x,"Vendas","pos")).join("")}</div></div>
+  </div>
+  <div class=small style="margin-top:8px;color:#888">Obs: lucro negativo aparece também (pra denunciar o dia ruim).</div>`;
+}
+function draw(){
+  let cv=D("c"),ctx=cv.getContext("2d");ctx.clearRect(0,0,cv.width,cv.height);
+  let [Y,M]=S.split("-").map(Number),days=LD(Y,M),a=byDay(S);
+  let max=Math.max(1,...a.map(x=>x.v),...a.map(x=>x.g),...a.map(x=>Math.abs(x.l)));
+  let Lx=70,Tx=20,w=cv.width-90,h=cv.height-70;
+  ctx.strokeStyle="#2a2a2a";
+  for(let i=0;i<=4;i++){let y=Tx+(h*i/4);ctx.beginPath();ctx.moveTo(Lx,y);ctx.lineTo(Lx+w,y);ctx.stroke()}
+  ctx.strokeStyle="#333";ctx.beginPath();ctx.moveTo(Lx,Tx);ctx.lineTo(Lx,Tx+h);ctx.lineTo(Lx+w,Tx+h);ctx.stroke();
+  ctx.fillStyle="#888";ctx.font="22px Arial";
+  for(let i=0;i<=4;i++){let val=max*(1-i/4),y=Tx+(h*i/4);ctx.fillText(BRL(val).replace("R$","").trim(),6,y+8)}
+  let step=w/days;
+  for(let i=0;i<days;i++){
+    let x=Lx+i*step,v=a[i].v,g=a[i].g,l=a[i].l,vh=v/max*h,gh=g/max*h,lh=Math.abs(l)/max*h;
+    ctx.fillStyle="#fff";ctx.fillRect(x+step*0.10,Tx+h-vh,step*0.28,vh);
+    ctx.fillStyle="#7a2b2b";ctx.fillRect(x+step*0.42,Tx+h-gh,step*0.28,gh);
+    ctx.fillStyle=l>=0?"#2f8f4f":"#7a2b2b";ctx.fillRect(x+step*0.77,Tx+h-lh,step*0.10,lh);
+  }
+  ctx.fillStyle="#777";ctx.font="20px Arial";
+  for(let d of [1,8,15,22,29]){if(d>days)continue;let x=Lx+(d-1)*step;ctx.fillText(String(d),x+2,Tx+h+28)}
+}
+function hist6(){
+  let out=[];for(let i=0;i<6;i++){let m=PM(S,-i),t=T(m);out.push({m,t})}return out
+}
+function render(){
+  let f=D("ft").value,q=(D("q").value||"").toLowerCase().trim();
+  let tm=T(S),td=Tday(),pm=T(PM(S,-1));
+  D("today").innerHTML=`Vendas: ${BRL(td.v)}<br>Gastos: ${BRL(td.g)}<br>Lucro: <span class="${td.l<0?"neg":"pos"}">${BRL(td.l)}</span>`;
+  let pctMoM=pm.l?((tm.l-pm.l)/Math.max(1e-9,Math.abs(pm.l))*100).toFixed(0):"∞";
+  D("sum").innerHTML=
+    `Vendas: <b>${BRL(tm.v)}</b><br>Gastos: <b>${BRL(tm.g)}</b><br>Lucro: <span class="${tm.l<0?"neg":"pos"}">${BRL(tm.l)}</span><br>`+
+    `<div class=small>Lanç.: ${tm.c} • Dias com movimento: ${tm.activeDays}<br>Mês anterior (${ML(PM(S,-1))}): ${BRL(pm.l)} (${pctMoM}%)</div>`;
+  let M=L(KM,{}),meta=+M[S]||0,p=proj();
+  let pct=meta?Math.max(0,Math.min(100,(tm.l/meta)*100)):0;
+  let margem=tm.v>0?(tm.l/tm.v*100):0;
+  let margemEst=p.estFat>0?(p.estLucro/p.estFat*100):0;
+  D("metaBox").innerHTML=
+    `Meta lucro: <b>${meta?BRL(meta):"—"}</b><br>`+
+    `<div class=kv>`+
+      `<div class=i><div class=t>Projeção do mês (Faturamento)</div><div class=v>${BRL(p.estFat)}</div><div class=small>Média ${BRL(p.avgFat)}/dia • ${p.cur}/${p.days} dias</div></div>`+
+      `<div class=i><div class=t>Projeção do mês (Lucro)</div><div class=v>${BRL(p.estLucro)}</div><div class=small>Média ${BRL(p.avgLucro)}/dia • Margem est. ${margemEst.toFixed(1)}%</div></div>`+
+      `<div class=i><div class=t>Margem atual</div><div class=v>${margem.toFixed(1)}%</div><div class=small>Lucro ÷ Vendas (mês)</div></div>`+
+    `</div>`+
+    (meta?`<div class=bar><div class=fill id=fill></div></div><div class=small>Progresso da meta: ${pct.toFixed(0)}%</div>`
+         :`<div class=small>Defina a meta para ver a barra.</div>`);
+  let fill=D("fill"); if(fill) fill.style.width=pct+"%";
+  D("rank").innerHTML=rankHTML();
+  D("hist").innerHTML=hist6().map(o=>`<div class=small><b>${ML(o.m)}</b>: ${BRL(o.t.l)} (V ${BRL(o.t.v)} • G ${BRL(o.t.g)})</div>`).join("") || "<div class=small>Sem dados.</div>";
+  let rows=R.filter(r=>r.m===S).sort((a,b)=>(b.data.localeCompare(a.data))||(b.at-a.at));
+  if(f!="TODOS") rows=rows.filter(r=>r.tipo==f);
+  if(q) rows=rows.filter(r=>(r.desc||"").toLowerCase().includes(q));
+  D("list").innerHTML=rows.length?rows.map(r=>`
+    <div class=card><span class=badge>${r.tipo}</span>
+      <div style="font-weight:800">${BRL(r.val)}</div>
+      <div class=small>${BRD(r.data)}${r.desc?` • ${r.desc}`:""}</div>
+      <button class=danger onclick="del('${r.id}')">Apagar</button>
+    </div>`).join(""):`<div class="card small">Nada pra mostrar.</div>`;
+  draw();D("tip").textContent="";
+}
+function bindGraphTap(){
+  let cv=D("c");
+  function pickDay(ev){
+    let rect=cv.getBoundingClientRect();
+    let x=(ev.touches?ev.touches[0].clientX:ev.clientX)-rect.left;
+    let w=rect.width,days=LD(...S.split("-").map(Number));
+    let Lx=70,usable=w-90;
+    let xr=(x-(Lx*(w/1000))); if(xr<0)return;
+    let step=usable/days;
+    let idx=Math.max(0,Math.min(days-1,Math.floor(xr/step)));
+    let a=byDay(S)[idx];
+    D("tip").textContent=`${P2(a.day)}/${S.slice(5,7)}: Vendas ${BRL(a.v)} • Gastos ${BRL(a.g)} • Lucro ${BRL(a.l)}`;
+  }
+  cv.addEventListener("click",pickDay,{passive:true});
+  cv.addEventListener("touchstart",pickDay,{passive:true});
+}
+
+bindGraphTap();
+render();
+lockIfNeeded(); // pede PIN ao abrir (ou cria o primeiro)
+</script></body></html>
