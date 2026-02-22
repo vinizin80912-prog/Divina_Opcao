@@ -1,0 +1,196 @@
+<!doctype html><html lang=pt-br><head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Divina Opção • Caixa</title>
+<meta name=theme-color content="#0f0f0f">
+<style>
+body{margin:0;background:#0f0f0f;color:#fff;font-family:Arial;padding:14px}
+h2,h3{margin:10px 0}
+.card{background:#151515;border:1px solid #262626;border-radius:16px;padding:12px;margin:10px 0}
+.row{display:flex;gap:10px}.row>*{flex:1}
+input,select,textarea{width:100%;padding:11px;margin:6px 0;border-radius:12px;border:1px solid #333;background:#0b0b0b;color:#fff}
+button{border:0;border-radius:12px;padding:10px;font-weight:800}
+.b1{background:#fff;color:#111}.b2{background:#1c1c1c;color:#fff;border:1px solid #3a3a3a}
+.danger{background:#361616;border:1px solid #7a2b2b;color:#fff}
+.badge{display:inline-block;padding:4px 10px;border-radius:999px;border:1px solid #333;background:#0b0b0b;font-size:12px}
+.small{color:#aaa;font-size:12px}
+.month{display:flex;align-items:center;gap:10px}
+.month div{flex:1;text-align:center;font-weight:900}
+.pos{color:#58ff8a;font-weight:900}.neg{color:#ff6b6b;font-weight:900}
+.bar{height:10px;border:1px solid #333;border-radius:999px;overflow:hidden;margin-top:6px}
+.fill{height:100%;background:#fff;width:0%}
+</style></head><body>
+
+<h2>Divina Opção • Caixa</h2>
+
+<div class="card month">
+<button class=b2 onclick="mm(-1)">◀</button>
+<div id=mt>----</div>
+<button class=b2 onclick="mm(1)">▶</button>
+</div>
+
+<div class=card>
+<div class=row>
+<select id=t><option>Venda</option><option>Gasto</option></select>
+<input id=d type=date>
+</div>
+<input id=v type=number step=.01 placeholder=Valor>
+<input id=x placeholder=Descrição>
+
+<div class=row>
+<button class=b1 onclick=save()>Salvar</button>
+<button class=b2 onclick=clr()>Limpar</button>
+</div>
+
+<div class=row>
+<button class=b2 onclick=hoje()>HOJE</button>
+<button class=b2 onclick="alert(clos())">Fechamento</button>
+</div>
+
+<details>
+<summary class=badge>Meta • Backup</summary>
+
+<div class=row>
+<input id=meta type=number step=.01 placeholder="Meta de lucro">
+<button class=b2 onclick=setMeta()>Salvar</button>
+</div>
+
+<div class=row>
+<button class=b2 onclick=exp()>Export JSON</button>
+<button class=b2 onclick=imp()>Import JSON</button>
+</div>
+
+<textarea id=bk placeholder="Backup JSON aqui"></textarea>
+
+<button class=danger onclick=wipe()>Apagar TUDO</button>
+</details>
+</div>
+
+<div class=card>
+<div class=row>
+<select id=ft onchange=render()>
+<option value=TODOS>Mostrar: Todos</option>
+<option>Venda</option>
+<option>Gasto</option>
+</select>
+<input id=q placeholder=Buscar oninput=render()>
+</div>
+</div>
+
+<h3>Hoje</h3>
+<div class=card id=today></div>
+
+<h3>Resumo do mês</h3>
+<div class=card id=sum></div>
+
+<h3>Meta e Projeção</h3>
+<div class=card id=metaBox></div>
+
+<h3>Lançamentos</h3>
+<div id=list></div>
+
+<script>
+const K="do_caixa_v1",KM="do_meta";
+let R=L(K,[]),S=YM(new Date());
+
+D("d").value=TD();
+D("mt").textContent=ML(S);
+loadMeta();
+
+function D(i){return document.getElementById(i)}
+function L(k,d){try{return JSON.parse(localStorage.getItem(k)||"null")??d}catch{return d}}
+function W(k,v){localStorage.setItem(k,JSON.stringify(v))}
+function P2(n){return String(n).padStart(2,"0")}
+function YM(d){return d.getFullYear()+"-"+P2(d.getMonth()+1)}
+function TD(){let d=new Date();return d.getFullYear()+"-"+P2(d.getMonth()+1)+"-"+P2(d.getDate())}
+function ML(s){let[y,m]=s.split("-");let n=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];return n[m-1]+" "+y}
+function BRL(v){return Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}
+function BRD(s){let[y,m,d]=s.split("-");return d+"/"+m+"/"+y}
+function ID(){return "i"+Math.random().toString(16).slice(2)+Date.now()}
+function LD(y,m1){return new Date(y,m1,0).getDate()}
+function PM(s,d){let[y,m]=s.split("-").map(Number),dt=new Date(y,m-1+d,1);return YM(dt)}
+
+function mm(d){S=PM(S,d);D("mt").textContent=ML(S);loadMeta();render()}
+function hoje(){D("d").value=TD()}
+function clr(){D("t").value="Venda";D("v").value="";D("x").value=""}
+
+function save(){
+let tipo=D("t").value,data=D("d").value,val=+D("v").value.replace(",",".")
+if(!data||!val)return alert("Dados inválidos")
+let m=data.slice(0,7)
+R.push({id:ID(),tipo,data,val,desc:D("x").value,m})
+W(K,R);clr();S=m;D("mt").textContent=ML(S);loadMeta();render()
+}
+
+function del(id){R=R.filter(r=>r.id!=id);W(K,R);render()}
+
+function T(m){
+let v=0,g=0,c=0
+for(let r of R)if(r.m===m){c++;r.tipo=="Venda"?v+=r.val:g+=r.val}
+return{v,g,l:v-g,c}
+}
+
+function Tday(){
+let v=0,g=0,d=TD()
+for(let r of R)if(r.data===d){r.tipo=="Venda"?v+=r.val:g+=r.val}
+return{v,g,l:v-g}
+}
+
+function clos(){let t=T(S)
+return`Vendas: ${BRL(t.v)}\nGastos: ${BRL(t.g)}\nLucro: ${BRL(t.l)}`
+}
+
+function exp(){D("bk").value=JSON.stringify(R,null,2)}
+function imp(){
+let s=D("bk").value
+try{R=JSON.parse(s);W(K,R);render()}
+catch{alert("JSON inválido")}
+}
+
+function wipe(){if(confirm("Apagar tudo?")){R=[];W(K,R);render()}}
+
+function loadMeta(){let M=L(KM,{});D("meta").value=M[S]??""}
+function setMeta(){
+let M=L(KM,{}),v=+D("meta").value
+if(!v)delete M[S];else M[S]=v
+W(KM,M);render()
+}
+
+function render(){
+let tm=T(S),td=Tday()
+
+D("today").innerHTML=
+`Vendas: ${BRL(td.v)}<br>
+Gastos: ${BRL(td.g)}<br>
+Lucro: <span class="${td.l<0?"neg":"pos"}">${BRL(td.l)}</span>`
+
+D("sum").innerHTML=
+`Vendas: ${BRL(tm.v)}<br>
+Gastos: ${BRL(tm.g)}<br>
+Lucro: <span class="${tm.l<0?"neg":"pos"}">${BRL(tm.l)}</span><br>
+<div class=small>Lançamentos: ${tm.c}</div>`
+
+let meta=L(KM,{})[S]||0,pct=meta?tm.l/meta*100:0
+
+D("metaBox").innerHTML=
+`Meta lucro: ${meta?BRL(meta):"—"}<br>
+${meta?`<div class=bar><div class=fill style="width:${pct}%"></div></div>`:""}`
+
+let f=D("ft").value,q=D("q").value.toLowerCase()
+
+let rows=R.filter(r=>r.m===S)
+if(f!="TODOS")rows=rows.filter(r=>r.tipo==f)
+if(q)rows=rows.filter(r=>(r.desc||"").toLowerCase().includes(q))
+
+D("list").innerHTML=rows.length?rows.map(r=>`
+<div class=card>
+<span class=badge>${r.tipo}</span>
+<div style="font-weight:900">${BRL(r.val)}</div>
+<div class=small>${BRD(r.data)} ${r.desc||""}</div>
+<button class=danger onclick="del('${r.id}')">Apagar</button>
+</div>`).join(""):"<div class='card small'>Nada pra mostrar</div>"
+}
+
+render()
+</script>
+</body></html>
